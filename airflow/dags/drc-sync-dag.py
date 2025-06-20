@@ -9,7 +9,7 @@ import os
 # === CONFIG ===
 config = {
     'dag_id': 'drc-sync-dag',
-    'schedule': '*/5 * * * *',
+    'schedule': '0 10 * * *',
     'start_date': datetime(2024, 1, 1),
     'script_dir': '/opt/airflow/spark-jobs/',
     'script_name': 'drc-sync-script.py',
