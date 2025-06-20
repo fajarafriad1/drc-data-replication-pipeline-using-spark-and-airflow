@@ -1,0 +1,9 @@
+apache-airflow-providers-apache-spark
+pandas
+pyarrow
+numpy
+requests
+boto3
+sqlalchemy
+openpyxl
+pyspark==3.5.0

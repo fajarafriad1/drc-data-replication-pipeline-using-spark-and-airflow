@@ -1,0 +1,28 @@
+FROM apache/airflow:2.10.5-python3.11
+
+USER root
+
+RUN apt-get update && apt-get install -y \
+    iputils-ping \
+    telnet \
+    nano \
+    curl \
+    vim \
+    openssh-server \
+    openjdk-17-jdk \
+    && apt-get clean
+
+# Set airflow user UID to 1000 (match jovyan/sparkuser) but keep GID=0 (root group)
+RUN usermod -u 1000 airflow && \
+    usermod -aG users airflow  # Optional: give access to shared group files
+
+# Create Spark event log directory and set ownership
+RUN mkdir -p /opt/airflow/spark-events && \
+    chown -R airflow:root /opt/airflow/spark-events && \
+    chmod -R 2775 /opt/airflow/spark-events
+
+USER airflow
+
+# Install Python packages
+COPY requirements-airflow.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements-airflow.txt

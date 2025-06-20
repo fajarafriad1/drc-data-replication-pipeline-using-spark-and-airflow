@@ -1,0 +1,24 @@
+# Ignore HDFS and database runtime data
+hadoop-primary/*
+!hadoop-primary/*.Dockerfile
+!hadoop-primary/*.sh
+
+hadoop-primary/namenode/
+hadoop-primary/datanode/
+
+hadoop-secondary/*
+hadoop-secondary/namenode/
+hadoop-secondary/datanode/
+
+postgres/data/
+
+# Ignore Airflow logs
+airflow/logs/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VSCode or JetBrains IDEs
+.vscode/
+.idea/

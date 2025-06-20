@@ -1,0 +1,236 @@
+services:
+
+  # --- Primary DC: HDFS ---
+  drc-project-primary-dc-namenode:
+    profiles: ["primary-dc"]
+    image: drc-project-primary-dc-namenode
+    build:
+      context: .
+      dockerfile: Dockerfile.hadoop-namenode
+    container_name: drc-project-primary-dc-namenode
+    hostname: drc-project-primary-dc-namenode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://drc-project-primary-dc-namenode:8020
+      - HDFS_CONF_dfs_namenode_name_dir=file:///hadoop/dfs/name
+      - HDFS_CONF_dfs_replication=1
+    ports:
+      - "11870:9870"
+      - "11020:8020"
+    volumes:
+      - ./hadoop-primary/namenode:/hadoop/dfs/name
+    command: ["hdfs", "namenode"]
+    networks:
+      - drc-network
+
+  drc-project-primary-dc-datanode:
+    profiles: ["primary-dc"]
+    image: drc-project-primary-dc-datanode
+    build:
+      context: .
+      dockerfile: Dockerfile.hadoop-datanode
+    container_name: drc-project-primary-dc-datanode
+    hostname: drc-project-primary-dc-datanode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://drc-project-primary-dc-namenode:8020
+      - HDFS_CONF_dfs_datanode_data_dir=file:///hadoop/dfs/data
+    depends_on:
+      - drc-project-primary-dc-namenode
+    ports:
+      - "11864:9864"
+    volumes:
+      - ./hadoop-primary/datanode:/hadoop/dfs/data
+    command: ["hdfs", "datanode"]
+    networks:
+      - drc-network
+
+  # --- Primary DC: Spark ---
+  drc-project-primary-dc-spark-master:
+    profiles: ["primary-dc"]
+    image: drc-project-primary-dc-spark
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: drc-project-primary-dc-spark-master
+    hostname: drc-project-primary-dc-spark-master
+    ports:
+      - "11190:8080"
+      - "11077:7077"
+    environment:
+      - SPARK_MODE=master
+      - SPARK_LOCAL_IP=drc-project-primary-dc-spark-master
+      - SPARK_EVENTLOG_ENABLED=true
+    volumes:
+      - ./spark/apps:/opt/spark-apps
+    networks:
+      - drc-network
+
+  drc-project-primary-dc-spark-worker:
+    profiles: ["primary-dc"]
+    image: drc-project-primary-dc-spark
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: drc-project-primary-dc-spark-worker
+    hostname: drc-project-primary-dc-spark-worker
+    depends_on:
+      - drc-project-primary-dc-spark-master
+    ports:
+      - "11191:8080"
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://drc-project-primary-dc-spark-master:7077
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_DRIVER_MEMORY=1G
+      - SPARK_EXECUTOR_MEMORY=1G
+      - SPARK_LOCAL_IP=drc-project-primary-dc-spark-worker
+      - SPARK_EVENTLOG_ENABLED=true
+    volumes:
+      - ./spark/apps:/opt/spark-apps
+    networks:
+      - drc-network
+
+  # --- Primary DC: Minimal Airflow ---
+  drc-project-primary-dc-postgres:
+    profiles: ["primary-dc"]
+    image: postgres:13
+    container_name: drc-project-primary-dc-postgres
+    hostname: drc-project-primary-dc-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - drc-network
+
+  drc-project-primary-dc-airflow-init:
+    profiles: ["primary-dc"]
+    container_name: drc-project-primary-dc-airflow-init
+    hostname: drc-project-primary-dc-airflow-init
+    image: drc-project-primary-dc-airflow
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      - drc-project-primary-dc-postgres
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@drc-project-primary-dc-postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=ZnhA7vEyXpZsmOrFV5_zC1Pf1Tg_6XyplM5vnFYF8cw=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    entrypoint: >
+      bash -c "airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    networks:
+      - drc-network
+
+  drc-project-primary-dc-airflow-webserver:
+    profiles: ["primary-dc"]
+    image: drc-project-primary-dc-airflow
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: drc-project-primary-dc-airflow-webserver
+    hostname: drc-project-primary-dc-airflow-webserver
+    depends_on:
+      - drc-project-primary-dc-postgres
+      - drc-project-primary-dc-airflow-init
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@drc-project-primary-dc-postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=ZnhA7vEyXpZsmOrFV5_zC1Pf1Tg_6XyplM5vnFYF8cw=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    ports:
+      - "11080:8080"
+    command: webserver
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark-jobs:/opt/airflow/spark-jobs
+    networks:
+      - drc-network
+
+  drc-project-primary-dc-airflow-scheduler:
+    profiles: ["primary-dc"]
+    image: drc-project-primary-dc-airflow
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: drc-project-primary-dc-airflow-scheduler
+    hostname: drc-project-primary-dc-airflow-scheduler
+    depends_on:
+      - drc-project-primary-dc-postgres
+      - drc-project-primary-dc-airflow-init
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@drc-project-primary-dc-postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=ZnhA7vEyXpZsmOrFV5_zC1Pf1Tg_6XyplM5vnFYF8cw=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    command: scheduler
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark-jobs:/opt/airflow/spark-jobs
+    networks:
+      - drc-network
+
+  # --- Secondary DC: HDFS only ---
+  drc-project-secondary-dc-namenode:
+    profiles: ["secondary-dc"]
+    image: drc-project-secondary-dc-namenode
+    build:
+      context: .
+      dockerfile: Dockerfile.hadoop-namenode
+    container_name: drc-project-secondary-dc-namenode
+    hostname: drc-project-secondary-dc-namenode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://drc-project-secondary-dc-namenode:8020
+      - HDFS_CONF_dfs_namenode_name_dir=file:///hadoop/dfs/name
+    ports:
+      - "21870:9870"
+      - "21020:8020"
+    volumes:
+      - ./hadoop-secondary/namenode:/hadoop/dfs/name
+    command: ["hdfs", "namenode"]
+    networks:
+      - drc-network
+
+  drc-project-secondary-dc-datanode:
+    profiles: ["secondary-dc"]
+    image: drc-project-secondary-dc-datanode
+    build:
+      context: .
+      dockerfile: Dockerfile.hadoop-datanode
+    container_name: drc-project-secondary-dc-datanode
+    hostname: drc-project-secondary-dc-datanode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://drc-project-secondary-dc-namenode:8020
+      - HDFS_CONF_dfs_datanode_data_dir=file:///hadoop/dfs/data
+    depends_on:
+      - drc-project-secondary-dc-namenode
+    ports:
+      - "21864:9864"
+    volumes:
+      - ./hadoop-secondary/datanode:/hadoop/dfs/data
+    command: ["hdfs", "datanode"]
+    networks:
+      - drc-network
+
+networks:
+  drc-network:
+    name: drc-network
+    driver: bridge

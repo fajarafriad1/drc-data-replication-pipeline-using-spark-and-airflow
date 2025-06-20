@@ -1,0 +1,6 @@
+pandas
+pyarrow
+numpy
+requests
+openpyxl
+pyspark==3.5.0

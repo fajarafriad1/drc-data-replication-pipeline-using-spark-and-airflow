@@ -1,0 +1,29 @@
+FROM docker.io/bitnami/spark:3.5.0
+
+USER root
+
+RUN bash -c '\
+  if ! getent group sparkuser >/dev/null; then groupadd -g 1000 sparkuser; fi && \
+  if ! id -u sparkuser >/dev/null 2>&1; then useradd -m -u 1000 -g 1000 -s /bin/bash sparkuser; fi && \
+  chown -R sparkuser:sparkuser /opt/bitnami && \
+  chmod -R u+rwX /opt/bitnami \
+'
+
+# Pastikan direktori `conf` bisa ditulis
+RUN chmod -R u+rwX /opt/bitnami/spark/conf
+
+RUN apt-get update && apt-get install -y \
+    iputils-ping \
+    telnet \
+    nano \
+    curl \
+    vim \
+    openssh-server \
+    && apt-get clean
+
+# Switch ke user sparkuser
+USER sparkuser
+
+# Install Python packages
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
