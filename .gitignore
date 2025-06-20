@@ -18,7 +18,11 @@ airflow/logs/
 # Python cache
 __pycache__/
 *.pyc
+*.py[cod]
 
-# VSCode or JetBrains IDEs
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VSCode and JetBrains IDEs
 .vscode/
 .idea/
